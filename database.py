@@ -31,7 +31,7 @@ def get_connection():
 
 
 def init_db():
-    """Creates all tables if they do not exist yet."""
+    """Creates all tables if they do not exist yet and applies migrations."""
     conn = get_connection()
     cur = conn.cursor()
 
@@ -42,6 +42,7 @@ def init_db():
             make TEXT,
             model TEXT,
             year INTEGER,
+            vin TEXT,
             engine_code TEXT,
             engine_size TEXT,
             oil_spec TEXT,
@@ -127,6 +128,13 @@ def init_db():
     )
     conn.commit()
 
+    # Перевірка міграції: додаємо vin у старі бази даних, якщо поля ще немає
+    cur.execute("PRAGMA table_info(cars)")
+    columns = [row["name"] for row in cur.fetchall()]
+    if "vin" not in columns:
+        cur.execute("ALTER TABLE cars ADD COLUMN vin TEXT")
+        conn.commit()
+
     # sensible defaults, only set once
     defaults = {
         "language": "uk",
@@ -164,14 +172,14 @@ def set_setting(key, value):
 
 # ------------------------------------------------------------------- cars
 
-def add_car(make, model, year, engine_code="", engine_size="", oil_spec="",
+def add_car(make, model, year, vin="", engine_code="", engine_size="", oil_spec="",
             fuel_type="", odometer=0, image_path=""):
     conn = get_connection()
     cur = conn.execute(
-        """INSERT INTO cars (make, model, year, engine_code, engine_size, oil_spec,
+        """INSERT INTO cars (make, model, year, vin, engine_code, engine_size, oil_spec,
            fuel_type, odometer, image_path, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (make, model, year, engine_code, engine_size, oil_spec, fuel_type,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (make, model, year, vin, engine_code, engine_size, oil_spec, fuel_type,
          odometer, image_path, datetime.datetime.now().isoformat()),
     )
     car_id = cur.lastrowid
@@ -205,6 +213,21 @@ def update_car(car_id, **fields):
     conn.execute(f"UPDATE cars SET {cols} WHERE id=?", (*fields.values(), car_id))
     conn.commit()
     conn.close()
+
+
+def update_car_passport(car_id, make, model, year, vin, engine_code, engine_size, oil_spec, fuel_type):
+    """Швидка оновлювалка паспортних даних авто."""
+    update_car(
+        car_id,
+        make=make,
+        model=model,
+        year=year,
+        vin=vin,
+        engine_code=engine_code,
+        engine_size=engine_size,
+        oil_spec=oil_spec,
+        fuel_type=fuel_type
+    )
 
 
 def delete_car(car_id):
@@ -486,3 +509,8 @@ def get_monthly_summary(car_id):
             "cost_per_km": cost_per_km,
         })
     return result
+
+
+if __name__ == "__main__":
+    init_db()
+    print("Фундамент (database.py) успішно оновлено та перевірено!")
