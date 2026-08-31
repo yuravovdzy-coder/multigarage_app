@@ -9,7 +9,6 @@ from kivy.lang import Builder
 from kivy.clock import Clock
 from kivy.properties import StringProperty, NumericProperty
 from kivy.uix.screenmanager import Screen
-from kivy.uix.carousel import Carousel
 
 import database as db
 import theme
@@ -46,7 +45,7 @@ KV = """
                 icon: "cog"
                 theme_text_color: "Custom"
                 text_color: app.theme_colors["text_primary"]
-                on_release: app.switch_screen("settings", "left")
+                on_release: root.open_settings()
 
         # Карусель авто з підтримкою свайпів пальцем
         Carousel:
@@ -82,10 +81,12 @@ class DashboardScreen(Screen):
     def on_pre_enter(self, *args):
         self._tick(0)
         self._clock_ev = Clock.schedule_interval(self._tick, 1)
+        # Початкове заповнення даних до появи екрана
+        self.reload_cars()
 
     def on_enter(self, *args):
-        # Примусово оновлюємо картки щоразу при переході на головний екран
-        self.reload_cars()
+        # Відкладений примусовий перерахунок розмірів каруселі після завершення анімації
+        Clock.schedule_once(lambda dt: self._force_refresh(), 0.05)
 
     def on_leave(self, *args):
         if hasattr(self, "_clock_ev"):
@@ -96,6 +97,17 @@ class DashboardScreen(Screen):
         self.clock_text = now.strftime("%H:%M")
         self.date_text = now.strftime("%d %B %Y")
 
+    def _force_refresh(self):
+        carousel = self.ids.car_carousel
+        carousel.do_layout()
+        self.refresh_reminder_strip()
+
+    def open_settings(self):
+        """Безпечний перехід у налаштування."""
+        app = self._app()
+        if hasattr(app, "switch_screen"):
+            app.switch_screen("settings", "left")
+
     # ------------------------------------------------------------ cars
 
     def reload_cars(self):
@@ -103,7 +115,11 @@ class DashboardScreen(Screen):
             from screens.car_card import build_car_slide, build_add_car_slide
 
             carousel = self.ids.car_carousel
+            
+            # Відв'язуємо слухач перед очищенням, щоб уникнути помилкових викликів
+            carousel.unbind(index=self._on_carousel_slide_change)
             carousel.clear_widgets()
+            
             cars = db.get_cars()
             
             # Додаємо слайд кожного існуючого авто
@@ -128,7 +144,7 @@ class DashboardScreen(Screen):
                         break
                 carousel.index = target_index
             
-            # Прив'язуємо зміну активного авто до свайпу каруселі
+            # Повертаємо слухач події зміни слайда
             carousel.bind(index=self._on_carousel_slide_change)
             self.refresh_reminder_strip()
         except Exception as e:
