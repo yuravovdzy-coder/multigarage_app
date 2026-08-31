@@ -46,7 +46,7 @@ KV = """
                 icon: "cog"
                 theme_text_color: "Custom"
                 text_color: app.theme_colors["text_primary"]
-                on_release: app.switch_screen("settings")
+                on_release: app.switch_screen("settings", "left")
 
         # Карусель авто з підтримкою свайпів пальцем
         Carousel:
@@ -82,6 +82,9 @@ class DashboardScreen(Screen):
     def on_pre_enter(self, *args):
         self._tick(0)
         self._clock_ev = Clock.schedule_interval(self._tick, 1)
+
+    def on_enter(self, *args):
+        # Примусово оновлюємо картки щоразу при переході на головний екран
         self.reload_cars()
 
     def on_leave(self, *args):
@@ -112,8 +115,18 @@ class DashboardScreen(Screen):
             add_slide = build_add_car_slide(self)
             carousel.add_widget(add_slide)
 
+            # Відновлюємо активний автомобіль
             if cars:
-                self.active_car_id = cars[0]["id"]
+                if not self.active_car_id:
+                    self.active_car_id = cars[0]["id"]
+                
+                # Знаходимо потрібний індекс слайда для збереження позиції
+                target_index = 0
+                for idx, car in enumerate(cars):
+                    if car["id"] == self.active_car_id:
+                        target_index = idx
+                        break
+                carousel.index = target_index
             
             # Прив'язуємо зміну активного авто до свайпу каруселі
             carousel.bind(index=self._on_carousel_slide_change)
@@ -133,7 +146,7 @@ class DashboardScreen(Screen):
         self.active_car_id = car_id
         app = self._app()
         app.current_car_id = car_id
-        app.switch_screen("car_menu")
+        app.switch_screen("car_menu", "left")
 
     def refresh_reminder_strip(self):
         strip = self.ids.reminder_strip
@@ -149,11 +162,14 @@ class DashboardScreen(Screen):
             return
             
         for rem in db.get_reminders(self.active_car_id):
+            # Пропускаємо нагадування про оливу в нижній стрічці, щоб воно не дублювалося з карткою
+            if "олива" in rem['name'].lower() or "масло" in rem['name'].lower():
+                continue
+
             remaining = db.compute_remaining_km(rem, car["odometer"])
             if remaining is None:
                 continue
                 
-            # Перевірка: якщо термін вийшов (<= 0 км) — яскраво-червоний колір
             if remaining <= 0:
                 text_color_rgba = [1, 0.2, 0.2, 1]  # Червоний
                 status_msg = f"{rem['name']}: УВАГА!"
