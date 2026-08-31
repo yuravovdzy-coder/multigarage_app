@@ -1,13 +1,6 @@
 """
 main.py
 Multi-Garage & Auto Care Assistant
-App entry point: sets up the dark-graphite theme, registers every
-screen, and runs the periodic "maintenance due" notification check.
-
-Run inside Pydroid 3:
-    pip install kivy kivymd pillow
-    python main.py
-(pytesseract is optional — see ocr_engine.py for details.)
 """
 
 import os
@@ -75,12 +68,28 @@ class GarageApp(MDApp):
         self.root.current = name
 
     def on_start(self):
+        Window.bind(on_keyboard=self._on_back_key)
         self._check_due_reminders()
 
+    def _on_back_key(self, window, key, *args):
+        # 27 — Android back button / Esc key
+        if key == 27:
+            current = self.root.current
+            if current == "car_menu":
+                self.switch_screen("dashboard", direction="right")
+                return True
+            elif current in ["fuel", "maintenance", "expenses", "reminders", "analytics", "garage", "add_car"]:
+                self.switch_screen("car_menu", direction="right")
+                return True
+            elif current == "settings":
+                self.switch_screen("dashboard", direction="right")
+                return True
+            elif current == "dashboard":
+                # Дозволяємо згортання/вихід з додатка лише з головного екрана
+                return False
+        return False
+
     def _check_due_reminders(self):
-        """Simple in-app due-check; runs once on launch. System push
-        notifications need plyer.notification wired to the OS scheduler,
-        which is a per-platform build step outside Pydroid 3's scope."""
         if db.get_setting("notifications", "1") != "1":
             return
         for car in db.get_cars():
@@ -95,7 +104,7 @@ class GarageApp(MDApp):
                             timeout=5,
                         )
                     except Exception:
-                        pass  # plyer/OS notification backend not available
+                        pass
 
 
 if __name__ == "__main__":
