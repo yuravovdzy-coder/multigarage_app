@@ -47,7 +47,7 @@ KV = """
                 text_color: app.theme_colors["text_primary"]
                 on_release: root.open_settings()
 
-        # Карусель авто з підтримкою свайпів пальцем
+        # Карусель авто
         Carousel:
             id: car_carousel
             size_hint_y: 0.72
@@ -78,32 +78,30 @@ class DashboardScreen(Screen):
     date_text = StringProperty("")
     active_car_id = NumericProperty(0)
 
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self._clock_ev = None
+
     def on_pre_enter(self, *args):
         self._tick(0)
-        self._clock_ev = Clock.schedule_interval(self._tick, 1)
-        # Початкове заповнення даних до появи екрана
-        self.reload_cars()
+        if not self._clock_ev:
+            self._clock_ev = Clock.schedule_interval(self._tick, 1)
 
     def on_enter(self, *args):
-        # Відкладений примусовий перерахунок розмірів каруселі після завершення анімації
-        Clock.schedule_once(lambda dt: self._force_refresh(), 0.05)
+        # Викликаємо завантаження лише після повного входу на екран через Clock
+        Clock.schedule_once(lambda dt: self.reload_cars(), 0.01)
 
     def on_leave(self, *args):
-        if hasattr(self, "_clock_ev"):
+        if self._clock_ev:
             self._clock_ev.cancel()
+            self._clock_ev = None
 
     def _tick(self, dt):
         now = datetime.datetime.now()
         self.clock_text = now.strftime("%H:%M")
         self.date_text = now.strftime("%d %B %Y")
 
-    def _force_refresh(self):
-        carousel = self.ids.car_carousel
-        carousel.do_layout()
-        self.refresh_reminder_strip()
-
     def open_settings(self):
-        """Безпечний перехід у налаштування."""
         app = self._app()
         if hasattr(app, "switch_screen"):
             app.switch_screen("settings", "left")
@@ -111,47 +109,52 @@ class DashboardScreen(Screen):
     # ------------------------------------------------------------ cars
 
     def reload_cars(self):
+        if "car_carousel" not in self.ids:
+            return
+
+        carousel = self.ids.car_carousel
+        
         try:
             from screens.car_card import build_car_slide, build_add_car_slide
 
-            carousel = self.ids.car_carousel
-            
-            # Відв'язуємо слухач перед очищенням, щоб уникнути помилкових викликів
+            # Відв'язуємо слухач перед очищенням
             carousel.unbind(index=self._on_carousel_slide_change)
             carousel.clear_widgets()
             
-            cars = db.get_cars()
+            cars = db.get_cars() or []
             
-            # Додаємо слайд кожного існуючого авто
+            # Додаємо слайди авто
             for car in cars:
                 slide = build_car_slide(car, self)
                 carousel.add_widget(slide)
             
-            # ЗАВЖДИ додаємо слайд "Додати авто" в кінець
+            # Слайд додавання авто
             add_slide = build_add_car_slide(self)
             carousel.add_widget(add_slide)
 
-            # Відновлюємо активний автомобіль
+            # Вибір активного авто
             if cars:
                 if not self.active_car_id:
                     self.active_car_id = cars[0]["id"]
                 
-                # Знаходимо потрібний індекс слайда для збереження позиції
                 target_index = 0
                 for idx, car in enumerate(cars):
                     if car["id"] == self.active_car_id:
                         target_index = idx
                         break
                 carousel.index = target_index
-            
-            # Повертаємо слухач події зміни слайда
+            else:
+                carousel.index = 0
+
             carousel.bind(index=self._on_carousel_slide_change)
             self.refresh_reminder_strip()
+            carousel.do_layout()
+            
         except Exception as e:
             print(f"Error loading cars: {e}")
 
     def _on_carousel_slide_change(self, carousel, index):
-        cars = db.get_cars()
+        cars = db.get_cars() or []
         if index < len(cars):
             self.active_car_id = cars[index]["id"]
             app = self._app()
@@ -165,8 +168,12 @@ class DashboardScreen(Screen):
         app.switch_screen("car_menu", "left")
 
     def refresh_reminder_strip(self):
+        if "reminder_strip" not in self.ids:
+            return
+            
         strip = self.ids.reminder_strip
         strip.clear_widgets()
+        
         if not self.active_car_id:
             return
             
@@ -178,7 +185,6 @@ class DashboardScreen(Screen):
             return
             
         for rem in db.get_reminders(self.active_car_id):
-            # Пропускаємо нагадування про оливу в нижній стрічці, щоб воно не дублювалося з карткою
             if "олива" in rem['name'].lower() or "масло" in rem['name'].lower():
                 continue
 
@@ -187,7 +193,7 @@ class DashboardScreen(Screen):
                 continue
                 
             if remaining <= 0:
-                text_color_rgba = [1, 0.2, 0.2, 1]  # Червоний
+                text_color_rgba = [1, 0.2, 0.2, 1]
                 status_msg = f"{rem['name']}: УВАГА!"
             else:
                 color_hex = theme.status_color(remaining) if hasattr(theme, "status_color") else theme.ACCENT
