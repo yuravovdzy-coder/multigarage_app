@@ -28,7 +28,7 @@ LONG_PRESS_SECONDS = 0.6
 
 
 class LongPressImage(ButtonBehavior, Image):
-    """Image, що підтримує fit_mode та обробляє довге і коротке натискання."""
+    """Image, що обробляє довге і коротке натискання."""
 
     def __init__(self, on_tap=None, on_long_press=None, **kwargs):
         super().__init__(**kwargs)
@@ -57,7 +57,6 @@ class LongPressImage(ButtonBehavior, Image):
 
 
 def _oil_reminder(car):
-    """Шукає нагадування про моторну оливу."""
     for rem in db.get_reminders(car["id"]):
         if "олив" in rem["name"].lower() or "oil" in rem["name"].lower():
             return rem
@@ -68,7 +67,7 @@ def build_car_slide(car, dashboard_screen):
     screen = Screen(name=f"car_{car['id']}")
     root = MDFloatLayout(md_bg_color=theme.hex_to_rgba(theme.BG_ROOT))
 
-    # Вмикаємо clip_to_bounds або stencil, щоб картинка не виходила за межі
+    # Головна картка з фіксованими розмірами
     card = MDCard(
         radius=[28, 28, 28, 28],
         md_bg_color=theme.hex_to_rgba(theme.BG_CARD),
@@ -77,18 +76,19 @@ def build_car_slide(car, dashboard_screen):
         padding=0,
     )
     
-    # Використовуємо FloatLayout з примусовим обмеженням розміру
-    inner = MDFloatLayout(size_hint=(1, 1))
+    inner = MDFloatLayout()
 
     image_source = car.get("image_path") or DEFAULT_CAR_IMAGE
     if not os.path.exists(image_source):
         image_source = DEFAULT_CAR_IMAGE
 
-    # fit_mode="cover" масштабує зображення точно по розміру рамки без спотворень
+    # Встановлюємо fit_mode="contain" та дозволяємо масштабування у межах картки
     img = LongPressImage(
         source=image_source,
-        fit_mode="cover",
-        size_hint=(1, 1),
+        fit_mode="contain",
+        allow_stretch=True,
+        keep_ratio=True,
+        size_hint=(0.9, 0.7),
         pos_hint={"center_x": 0.5, "center_y": 0.5},
         on_tap=lambda: dashboard_screen.open_car(car["id"]),
         on_long_press=lambda: _pick_new_image(car["id"], dashboard_screen),
@@ -190,7 +190,6 @@ def build_add_car_slide(dashboard_screen):
 
 
 def _pick_new_image(car_id, dashboard_screen):
-    """Відкриває менеджер файлів для вибору нового фото."""
     from kivymd.uix.filemanager import MDFileManager
 
     def select_path(path):
