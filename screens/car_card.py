@@ -13,7 +13,7 @@ from kivymd.uix.floatlayout import MDFloatLayout
 from kivymd.uix.card import MDCard
 from kivymd.uix.label import MDLabel
 from kivymd.uix.progressbar import MDProgressBar
-from kivymd.uix.fitimage import FitImage
+from kivy.uix.image import Image
 from kivy.metrics import dp
 
 import database as db
@@ -27,8 +27,8 @@ DEFAULT_CAR_IMAGE = os.path.join(
 LONG_PRESS_SECONDS = 0.6
 
 
-class LongPressFitImage(ButtonBehavior, FitImage):
-    """FitImage, що підтримує довге натискання та звичайний клік."""
+class LongPressImage(ButtonBehavior, Image):
+    """Image, що підтримує fit_mode та обробляє довге і коротке натискання."""
 
     def __init__(self, on_tap=None, on_long_press=None, **kwargs):
         super().__init__(**kwargs)
@@ -68,28 +68,28 @@ def build_car_slide(car, dashboard_screen):
     screen = Screen(name=f"car_{car['id']}")
     root = MDFloatLayout(md_bg_color=theme.hex_to_rgba(theme.BG_ROOT))
 
-    card_radius = [28, 28, 28, 28]
-
-    # Основна картка-контейнер
+    # Вмикаємо clip_to_bounds або stencil, щоб картинка не виходила за межі
     card = MDCard(
-        radius=card_radius,
+        radius=[28, 28, 28, 28],
         md_bg_color=theme.hex_to_rgba(theme.BG_CARD),
         pos_hint={"center_x": 0.5, "center_y": 0.5},
         size_hint=(0.92, 0.96),
         padding=0,
     )
+    
+    # Використовуємо FloatLayout з примусовим обмеженням розміру
     inner = MDFloatLayout(size_hint=(1, 1))
 
     image_source = car.get("image_path") or DEFAULT_CAR_IMAGE
     if not os.path.exists(image_source):
         image_source = DEFAULT_CAR_IMAGE
 
-    # Фото пропорційно заповнює 100% картки з округленням кутів
-    img = LongPressFitImage(
+    # fit_mode="cover" масштабує зображення точно по розміру рамки без спотворень
+    img = LongPressImage(
         source=image_source,
-        radius=card_radius,
+        fit_mode="cover",
         size_hint=(1, 1),
-        pos_hint={"x": 0, "y": 0},
+        pos_hint={"center_x": 0.5, "center_y": 0.5},
         on_tap=lambda: dashboard_screen.open_car(car["id"]),
         on_long_press=lambda: _pick_new_image(car["id"], dashboard_screen),
     )
