@@ -1,151 +1,209 @@
 """
 screens/car_card.py
-Renders individual car slides for Dashboard Carousel.
+Factory functions that build one carousel "page" per car for the
+Dashboard's inner ScreenManager.
 """
 
-from kivy.uix.image import Image
+import os
+from kivy.uix.screenmanager import Screen
+from kivy.uix.behaviors import ButtonBehavior
+from kivy.clock import Clock
 from kivymd.uix.boxlayout import MDBoxLayout
+from kivymd.uix.floatlayout import MDFloatLayout
 from kivymd.uix.card import MDCard
 from kivymd.uix.label import MDLabel
-from kivymd.uix.button import MDIconButton
 from kivymd.uix.progressbar import MDProgressBar
+from kivymd.uix.fitimage import FitImage
+from kivy.metrics import dp
 
-import theme
 import database as db
+import theme
+
+DEFAULT_CAR_IMAGE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "assets", "default_car.png",
+)
+
+LONG_PRESS_SECONDS = 0.6
+
+
+class LongPressFitImage(ButtonBehavior, FitImage):
+    """FitImage, що підтримує довге натискання та звичайний клік."""
+
+    def __init__(self, on_tap=None, on_long_press=None, **kwargs):
+        super().__init__(**kwargs)
+        self._on_tap = on_tap
+        self._on_long_press = on_long_press
+        self._press_ev = None
+        self._long_fired = False
+
+    def on_touch_down(self, touch):
+        if self.collide_point(*touch.pos):
+            self._long_fired = False
+            self._press_ev = Clock.schedule_once(self._fire_long_press, LONG_PRESS_SECONDS)
+        return super().on_touch_down(touch)
+
+    def _fire_long_press(self, dt):
+        self._long_fired = True
+        if self._on_long_press:
+            self._on_long_press()
+
+    def on_touch_up(self, touch):
+        if self._press_ev:
+            self._press_ev.cancel()
+        if self.collide_point(*touch.pos) and not self._long_fired and self._on_tap:
+            self._on_tap()
+        return super().on_touch_up(touch)
+
+
+def _oil_reminder(car):
+    """Шукає нагадування про моторну оливу."""
+    for rem in db.get_reminders(car["id"]):
+        if "олив" in rem["name"].lower() or "oil" in rem["name"].lower():
+            return rem
+    return None
 
 
 def build_car_slide(car, dashboard_screen):
-    """
-    Створює картку автомобіля з зображенням на весь розмір слайда.
-    """
+    screen = Screen(name=f"car_{car['id']}")
+    root = MDFloatLayout(md_bg_color=theme.hex_to_rgba(theme.BG_ROOT))
+
+    card_radius = [28, 28, 28, 28]
+
+    # Основна картка-контейнер
     card = MDCard(
-        orientation="vertical",
-        padding=0,
-        radius=[16, 16, 16, 16],
+        radius=card_radius,
         md_bg_color=theme.hex_to_rgba(theme.BG_CARD),
-        ripple_behavior=True,
-        on_release=lambda x: dashboard_screen.open_car(car["id"])
+        pos_hint={"center_x": 0.5, "center_y": 0.5},
+        size_hint=(0.92, 0.96),
+        padding=0,
     )
+    inner = MDFloatLayout(size_hint=(1, 1))
 
-    # Макет-контейнер для накладання тексту поверх зображення
-    from kivy.uix.relativelayout import RelativeLayout
-    rel = RelativeLayout()
+    image_source = car.get("image_path") or DEFAULT_CAR_IMAGE
+    if not os.path.exists(image_source):
+        image_source = DEFAULT_CAR_IMAGE
 
-    # Зображення авто: розтягується чітко по контуру картки
-    car_img = Image(
-        source=car.get("image", "assets/images/volvo_xc60.jpg"),
-        allow_stretch=True,
-        keep_ratio=False,  # Заповнює весь квадрат/прямокутник картки
+    # Фото пропорційно заповнює 100% картки з округленням кутів
+    img = LongPressFitImage(
+        source=image_source,
+        radius=card_radius,
         size_hint=(1, 1),
-        pos_hint={"x": 0, "y": 0}
-    )
-    rel.add_widget(car_img)
-
-    # Оверлей із інформацією поверх картинки
-    info_box = MDBoxLayout(
-        orientation="vertical",
-        padding=["16dp", "16dp", "16dp", "16dp"],
-        spacing="4dp",
         pos_hint={"x": 0, "y": 0},
-        size_hint=(1, 1)
+        on_tap=lambda: dashboard_screen.open_car(car["id"]),
+        on_long_press=lambda: _pick_new_image(car["id"], dashboard_screen),
     )
+    inner.add_widget(img)
 
-    # Заголовок (Марка/Модель)
-    title_lbl = MDLabel(
-        text=f"{car.get('make', '')} {car.get('model', '')} ({car.get('year', '')})",
-        font_style="Subtitle1",
+    # Верхній оверлей: Марка/Модель та Пробіг
+    top_box = MDBoxLayout(
+        orientation="vertical",
+        size_hint=(1, None),
+        height=dp(64),
+        pos_hint={"top": 1},
+        padding=(dp(16), dp(10)),
+    )
+    top_box.add_widget(MDLabel(
+        text=f"{car['make']} {car['model']} ({car['year']})",
         theme_text_color="Custom",
-        text_color=[1, 1, 1, 0.9],
-        size_hint_y=None,
-        height="24dp"
-    )
-    info_box.add_widget(title_lbl)
-
-    # Пробіг
-    odo_lbl = MDLabel(
-        text=f"{car.get('odometer', 0):,} км".replace(",", " "),
-        font_style="H4",
+        text_color=theme.hex_to_rgba(theme.TEXT_SECONDARY),
+        font_style="Caption",
+    ))
+    top_box.add_widget(MDLabel(
+        text=f"{car['odometer']:,} км".replace(",", " "),
+        theme_text_color="Custom",
+        text_color=theme.hex_to_rgba(theme.TEXT_PRIMARY),
+        font_style="H5",
         bold=True,
-        theme_text_color="Custom",
-        text_color=[1, 1, 1, 1],
-        size_hint_y=None,
-        height="36dp"
+    ))
+    inner.add_widget(top_box)
+
+    # Нижній оверлей: стан оливи
+    bottom_box = MDBoxLayout(
+        orientation="vertical",
+        size_hint=(1, None),
+        height=dp(72),
+        pos_hint={"y": 0},
+        padding=(dp(16), dp(6)),
+        spacing=dp(4),
     )
-    info_box.add_widget(odo_lbl)
+    oil = _oil_reminder(car)
+    remaining = db.compute_remaining_km(oil, car["odometer"]) if oil else None
+    interval = oil["interval_km"] if oil else 7000
+    remaining_display = max(remaining, 0) if remaining is not None else interval
+    ratio = 1 - (remaining_display / interval) if interval else 0
+    ratio = min(max(ratio, 0), 1)
 
-    # Заповнювач простору
-    info_box.add_widget(MDBoxLayout())
+    bottom_box.add_widget(MDLabel(
+        text=f"Моторна олива: залишилось {remaining_display:,} з {interval:,} км".replace(",", " "),
+        theme_text_color="Custom",
+        text_color=theme.hex_to_rgba(theme.status_color(remaining)),
+        font_style="Caption",
+    ))
+    bar = MDProgressBar(value=ratio * 100, max=100, size_hint_y=None, height=dp(6))
+    bar.color = theme.hex_to_rgba(theme.status_color(remaining))
+    bottom_box.add_widget(bar)
+    inner.add_widget(bottom_box)
 
-    # Прогрес-бар оливи внизу картки
-    reminders = db.get_reminders(car["id"])
-    oil_rem = next((r for r in reminders if "олива" in r["name"].lower() or "масло" in r["name"].lower()), None)
-    
-    if oil_rem:
-        rem_km = db.compute_remaining_km(oil_rem, car["odometer"]) or 0
-        total_interval = oil_rem.get("interval_km", 10000)
-        pct = max(0.0, min(1.0, rem_km / total_interval)) if total_interval else 0
-
-        oil_box = MDBoxLayout(
-            orientation="vertical",
-            size_hint_y=None,
-            height="40dp",
-            spacing="4dp"
-        )
-        oil_lbl = MDLabel(
-            text=f"Моторна олива: залишилось {rem_km} з {total_interval} км",
-            font_style="Caption",
-            theme_text_color="Custom",
-            text_color=[0.4, 0.9, 0.4, 1] if rem_km > 1000 else [1, 0.3, 0.3, 1]
-        )
-        pb = MDProgressBar(
-            value=pct * 100,
-            color=[0.2, 0.8, 0.4, 1] if rem_km > 1000 else [0.9, 0.2, 0.2, 1],
-            size_hint_y=None,
-            height="4dp"
-        )
-        oil_box.add_widget(oil_lbl)
-        oil_box.add_widget(pb)
-        info_box.add_widget(oil_box)
-
-    rel.add_widget(info_box)
-    card.add_widget(rel)
-    return card
+    card.add_widget(inner)
+    root.add_widget(card)
+    screen.add_widget(root)
+    return screen
 
 
 def build_add_car_slide(dashboard_screen):
-    """Слайд додавання нового авто."""
+    screen = Screen(name="add_car_slide")
+    root = MDFloatLayout(md_bg_color=theme.hex_to_rgba(theme.BG_ROOT))
     card = MDCard(
-        orientation="vertical",
-        padding="16dp",
-        radius=[16, 16, 16, 16],
-        md_bg_color=theme.hex_to_rgba(theme.BG_CARD),
+        radius=[28, 28, 28, 28],
+        md_bg_color=theme.hex_to_rgba(theme.BG_CARD_ALT),
+        pos_hint={"center_x": 0.5, "center_y": 0.5},
+        size_hint=(0.92, 0.96),
         ripple_behavior=True,
-        on_release=lambda x: dashboard_screen._app().switch_screen("add_car", "left")
+        on_release=lambda *a: dashboard_screen._app().switch_screen("add_car"),
     )
-    
     box = MDBoxLayout(
         orientation="vertical",
-        halign="center",
-        valign="center",
-        spacing="12dp"
+        pos_hint={"center_x": 0.5, "center_y": 0.5},
+        size_hint=(None, None),
+        size=(dp(120), dp(120)),
+        spacing=dp(8),
     )
-    
-    btn = MDIconButton(
+    from kivymd.uix.button import MDIconButton
+    box.add_widget(MDIconButton(
         icon="plus-circle-outline",
-        user_font_size="48dp",
-        pos_hint={"center_x": 0.5},
+        icon_size=dp(56),
         theme_text_color="Custom",
-        text_color=theme.hex_to_rgba(theme.ACCENT)
-    )
-    lbl = MDLabel(
+        text_color=theme.hex_to_rgba(theme.ACCENT),
+        pos_hint={"center_x": 0.5},
+    ))
+    box.add_widget(MDLabel(
         text="Додати авто",
         halign="center",
-        font_style="Headline6",
         theme_text_color="Custom",
-        text_color=theme.hex_to_rgba(theme.TEXT_PRIMARY)
-    )
-    
-    box.add_widget(btn)
-    box.add_widget(lbl)
+        text_color=theme.hex_to_rgba(theme.TEXT_SECONDARY),
+    ))
     card.add_widget(box)
-    return card
+    root.add_widget(card)
+    screen.add_widget(root)
+    return screen
+
+
+def _pick_new_image(car_id, dashboard_screen):
+    """Відкриває менеджер файлів для вибору нового фото."""
+    from kivymd.uix.filemanager import MDFileManager
+
+    def select_path(path):
+        db.update_car(car_id, image_path=path)
+        manager.close()
+        dashboard_screen.reload_cars()
+
+    def exit_manager(*args):
+        manager.close()
+
+    manager = MDFileManager(
+        exit_manager=exit_manager,
+        select_path=select_path,
+        ext=[".jpg", ".jpeg", ".png"],
+    )
+    manager.show(os.path.expanduser("~"))
