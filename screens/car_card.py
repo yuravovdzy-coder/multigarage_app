@@ -1,8 +1,7 @@
 """
 screens/car_card.py
 Factory functions that build one carousel "page" per car for the
-Dashboard's inner ScreenManager (this is what gives us the swipeable
-book-page transition without a separate custom widget per car).
+Dashboard's inner ScreenManager.
 """
 
 import os
@@ -14,7 +13,7 @@ from kivymd.uix.floatlayout import MDFloatLayout
 from kivymd.uix.card import MDCard
 from kivymd.uix.label import MDLabel
 from kivymd.uix.progressbar import MDProgressBar
-from kivy.uix.image import Image
+from kivymd.uix.fitimage import FitImage
 from kivy.metrics import dp
 
 import database as db
@@ -28,9 +27,9 @@ DEFAULT_CAR_IMAGE = os.path.join(
 LONG_PRESS_SECONDS = 0.6
 
 
-class LongPressImage(ButtonBehavior, Image):
-    """Image that fires on_long_press after being held, and a normal
-    on_release tap otherwise."""
+class LongPressFitImage(ButtonBehavior, FitImage):
+    """FitImage, що підтримує довне натискання та звичайний клік,
+    ідеально заповнюючи весь простір картки."""
 
     def __init__(self, on_tap=None, on_long_press=None, **kwargs):
         super().__init__(**kwargs)
@@ -59,7 +58,7 @@ class LongPressImage(ButtonBehavior, Image):
 
 
 def _oil_reminder(car):
-    """Finds the engine-oil reminder for status-color + progress math."""
+    """Шукає нагадування про моторну оливу."""
     for rem in db.get_reminders(car["id"]):
         if "олив" in rem["name"].lower() or "oil" in rem["name"].lower():
             return rem
@@ -70,29 +69,34 @@ def build_car_slide(car, dashboard_screen):
     screen = Screen(name=f"car_{car['id']}")
     root = MDFloatLayout(md_bg_color=theme.hex_to_rgba(theme.BG_ROOT))
 
+    card_radius = [28, 28, 28, 28]
+
+    # Картка займає 100% розміру слайда
     card = MDCard(
-        radius=[28, 28, 28, 28],
+        radius=card_radius,
         md_bg_color=theme.hex_to_rgba(theme.BG_CARD),
         pos_hint={"center_x": 0.5, "center_y": 0.5},
-        size_hint=(0.92, 0.96),
+        size_hint=(1, 1),
+        padding=0,
     )
-    inner = MDFloatLayout()
+    inner = MDFloatLayout(size_hint=(1, 1))
 
-    image_source = car["image_path"] or DEFAULT_CAR_IMAGE
+    image_source = car.get("image_path") or DEFAULT_CAR_IMAGE
     if not os.path.exists(image_source):
         image_source = DEFAULT_CAR_IMAGE
 
-    img = LongPressImage(
+    # Зображення заповнює 100% картки та обрізається по радіусу картки
+    img = LongPressFitImage(
         source=image_source,
-        allow_stretch=True,
-        keep_ratio=False,
+        radius=card_radius,
         size_hint=(1, 1),
+        pos_hint={"x": 0, "y": 0},
         on_tap=lambda: dashboard_screen.open_car(car["id"]),
         on_long_press=lambda: _pick_new_image(car["id"], dashboard_screen),
     )
     inner.add_widget(img)
 
-    # top overlay: make/model + odometer
+    # Верхній оверлей: Марка/Модель та Пробіг
     top_box = MDBoxLayout(
         orientation="vertical",
         size_hint=(1, None),
@@ -102,17 +106,20 @@ def build_car_slide(car, dashboard_screen):
     )
     top_box.add_widget(MDLabel(
         text=f"{car['make']} {car['model']} ({car['year']})",
-        theme_text_color="Custom", text_color=theme.hex_to_rgba(theme.TEXT_SECONDARY),
+        theme_text_color="Custom", 
+        text_color=theme.hex_to_rgba(theme.TEXT_SECONDARY),
         font_style="Caption",
     ))
     top_box.add_widget(MDLabel(
         text=f"{car['odometer']:,} км".replace(",", " "),
-        theme_text_color="Custom", text_color=theme.hex_to_rgba(theme.TEXT_PRIMARY),
-        font_style="H5", bold=True,
+        theme_text_color="Custom", 
+        text_color=theme.hex_to_rgba(theme.TEXT_PRIMARY),
+        font_style="H5", 
+        bold=True,
     ))
     inner.add_widget(top_box)
 
-    # bottom overlay: oil widget
+    # Нижній оверлей: статус оливи
     bottom_box = MDBoxLayout(
         orientation="vertical",
         size_hint=(1, None),
@@ -152,20 +159,31 @@ def build_add_car_slide(dashboard_screen):
         radius=[28, 28, 28, 28],
         md_bg_color=theme.hex_to_rgba(theme.BG_CARD_ALT),
         pos_hint={"center_x": 0.5, "center_y": 0.5},
-        size_hint=(0.92, 0.96),
+        size_hint=(1, 1),
         ripple_behavior=True,
         on_release=lambda *a: dashboard_screen._app().switch_screen("add_car"),
     )
-    box = MDBoxLayout(orientation="vertical", pos_hint={"center_x": 0.5, "center_y": 0.5},
-                       size_hint=(None, None), size=(dp(120), dp(120)), spacing=dp(8))
+    box = MDBoxLayout(
+        orientation="vertical", 
+        pos_hint={"center_x": 0.5, "center_y": 0.5},
+        size_hint=(None, None), 
+        size=(dp(120), dp(120)), 
+        spacing=dp(8)
+    )
     from kivymd.uix.button import MDIconButton
-    box.add_widget(MDIconButton(icon="plus-circle-outline", icon_size=dp(56),
-                                 theme_text_color="Custom",
-                                 text_color=theme.hex_to_rgba(theme.ACCENT),
-                                 pos_hint={"center_x": 0.5}))
-    box.add_widget(MDLabel(text="Додати авто", halign="center",
-                            theme_text_color="Custom",
-                            text_color=theme.hex_to_rgba(theme.TEXT_SECONDARY)))
+    box.add_widget(MDIconButton(
+        icon="plus-circle-outline", 
+        icon_size=dp(56),
+        theme_text_color="Custom",
+        text_color=theme.hex_to_rgba(theme.ACCENT),
+        pos_hint={"center_x": 0.5}
+    ))
+    box.add_widget(MDLabel(
+        text="Додати авто", 
+        halign="center",
+        theme_text_color="Custom",
+        text_color=theme.hex_to_rgba(theme.TEXT_SECONDARY)
+    ))
     card.add_widget(box)
     root.add_widget(card)
     screen.add_widget(root)
@@ -173,7 +191,7 @@ def build_add_car_slide(dashboard_screen):
 
 
 def _pick_new_image(car_id, dashboard_screen):
-    """Opens the KivyMD file manager so the user can pick a custom photo."""
+    """Відкриває вибір файлу для зміни фото авто."""
     from kivymd.uix.filemanager import MDFileManager
 
     def select_path(path):
