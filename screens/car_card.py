@@ -87,12 +87,12 @@ def build_car_slide(car, dashboard_screen):
     if not os.path.exists(image_source):
         image_source = DEFAULT_CAR_IMAGE
 
-    # FitImage заповнює центральну частину картки без перекриття текстів
+    # FitImage заповнює 100% внутрішньої площі картки без викривлень
     img = LongPressFitImage(
         source=image_source,
-        size_hint=(0.9, 0.6),
+        size_hint=(1, 1),
         pos_hint={"center_x": 0.5, "center_y": 0.5},
-        radius=[16, 16, 16, 16],
+        radius=card_radius,
         on_tap=lambda: dashboard_screen.open_car(car["id"]),
         on_long_press=lambda: _pick_new_image(car["id"], dashboard_screen),
     )
