@@ -9,8 +9,9 @@ from kivy.config import Config
 Config.set("graphics", "width", "400")
 Config.set("graphics", "height", "800")
 
+from kivy.clock import Clock
 from kivy.core.window import Window
-from kivy.uix.screenmanager import ScreenManager, SlideTransition
+from kivy.uix.screenmanager import ScreenManager, NoTransition, SlideTransition
 from kivymd.app import MDApp
 
 import database as db
@@ -49,7 +50,8 @@ class GarageApp(MDApp):
             "text_secondary": theme.hex_to_rgba(theme.TEXT_SECONDARY),
         }
 
-        sm = ScreenManager(transition=SlideTransition())
+        # Створюємо ScreenManager
+        sm = ScreenManager()
         sm.add_widget(SplashScreen())
         sm.add_widget(DashboardScreen())
         sm.add_widget(CarMenuScreen())
@@ -64,12 +66,20 @@ class GarageApp(MDApp):
         return sm
 
     def switch_screen(self, name, direction="left"):
-        self.root.transition.direction = direction
+        # Встановлюємо плавний перехід для звичайних екранів
+        self.root.transition = SlideTransition(direction=direction)
         self.root.current = name
 
     def on_start(self):
         Window.bind(on_keyboard=self._on_back_key)
         self._check_due_reminders()
+        
+        # Миттєвий перехід зі сплеш-екрана на головний (без анімації зсуву)
+        Clock.schedule_once(self._start_dashboard, 0.1)
+
+    def _start_dashboard(self, dt):
+        self.root.transition = NoTransition()
+        self.root.current = "dashboard"
 
     def _on_back_key(self, window, key, *args):
         # 27 — Android back button / Esc key
