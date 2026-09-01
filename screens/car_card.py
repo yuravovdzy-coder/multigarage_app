@@ -7,13 +7,14 @@ Dashboard's inner ScreenManager.
 import os
 from kivy.uix.screenmanager import Screen
 from kivy.uix.behaviors import ButtonBehavior
+from kivy.uix.stencillayout import StencilLayout
 from kivy.clock import Clock
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.floatlayout import MDFloatLayout
 from kivymd.uix.card import MDCard
 from kivymd.uix.label import MDLabel
 from kivymd.uix.progressbar import MDProgressBar
-from kivy.uix.image import Image
+from kivymd.uix.fitimage import FitImage
 from kivy.metrics import dp
 
 import database as db
@@ -27,8 +28,8 @@ DEFAULT_CAR_IMAGE = os.path.join(
 LONG_PRESS_SECONDS = 0.6
 
 
-class LongPressImage(ButtonBehavior, Image):
-    """Image, що обробляє довге і коротке натискання."""
+class LongPressFitImage(ButtonBehavior, FitImage):
+    """FitImage з підтримкою короткого та довгого натискання."""
 
     def __init__(self, on_tap=None, on_long_press=None, **kwargs):
         super().__init__(**kwargs)
@@ -67,29 +68,31 @@ def build_car_slide(car, dashboard_screen):
     screen = Screen(name=f"car_{car['id']}")
     root = MDFloatLayout(md_bg_color=theme.hex_to_rgba(theme.BG_ROOT))
 
+    card_radius = [28, 28, 28, 28]
+
     # Головна картка з фіксованими розмірами
     card = MDCard(
-        radius=[28, 28, 28, 28],
+        radius=card_radius,
         md_bg_color=theme.hex_to_rgba(theme.BG_CARD),
         pos_hint={"center_x": 0.5, "center_y": 0.5},
         size_hint=(0.92, 0.96),
         padding=0,
     )
-    
-    inner = MDFloatLayout()
+
+    # StencilLayout фізично обрізає будь-які елементи за межами картки
+    stencil = StencilLayout(size_hint=(1, 1))
+    inner = MDFloatLayout(size_hint=(1, 1))
 
     image_source = car.get("image_path") or DEFAULT_CAR_IMAGE
     if not os.path.exists(image_source):
         image_source = DEFAULT_CAR_IMAGE
 
-    # Встановлюємо fit_mode="contain" та дозволяємо масштабування у межах картки
-    img = LongPressImage(
+    # FitImage адаптує фотографію за форматом картки
+    img = LongPressFitImage(
         source=image_source,
-        fit_mode="contain",
-        allow_stretch=True,
-        keep_ratio=True,
-        size_hint=(0.9, 0.7),
+        size_hint=(1, 1),
         pos_hint={"center_x": 0.5, "center_y": 0.5},
+        radius=card_radius,
         on_tap=lambda: dashboard_screen.open_car(car["id"]),
         on_long_press=lambda: _pick_new_image(car["id"], dashboard_screen),
     )
@@ -145,7 +148,8 @@ def build_car_slide(car, dashboard_screen):
     bottom_box.add_widget(bar)
     inner.add_widget(bottom_box)
 
-    card.add_widget(inner)
+    stencil.add_widget(inner)
+    card.add_widget(stencil)
     root.add_widget(card)
     screen.add_widget(root)
     return screen
