@@ -6,7 +6,6 @@ Dashboard's inner ScreenManager.
 
 import os
 from kivy.uix.screenmanager import Screen
-from kivy.uix.behaviors import ButtonBehavior
 from kivy.clock import Clock
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.floatlayout import MDFloatLayout
@@ -27,8 +26,8 @@ DEFAULT_CAR_IMAGE = os.path.join(
 LONG_PRESS_SECONDS = 0.6
 
 
-class LongPressFitImage(ButtonBehavior, FitImage):
-    """FitImage з підтримкою короткого та довгого натискання."""
+class LongPressFitImage(FitImage):
+    """FitImage із надійною обробкою тапів та довгого натискання."""
 
     def __init__(self, on_tap=None, on_long_press=None, **kwargs):
         super().__init__(**kwargs)
@@ -39,8 +38,10 @@ class LongPressFitImage(ButtonBehavior, FitImage):
 
     def on_touch_down(self, touch):
         if self.collide_point(*touch.pos):
+            touch.grab(self)
             self._long_fired = False
             self._press_ev = Clock.schedule_once(self._fire_long_press, LONG_PRESS_SECONDS)
+            return True
         return super().on_touch_down(touch)
 
     def _fire_long_press(self, dt):
@@ -49,10 +50,13 @@ class LongPressFitImage(ButtonBehavior, FitImage):
             self._on_long_press()
 
     def on_touch_up(self, touch):
-        if self._press_ev:
-            self._press_ev.cancel()
-        if self.collide_point(*touch.pos) and not self._long_fired and self._on_tap:
-            self._on_tap()
+        if touch.grab_current is self:
+            touch.ungrab(self)
+            if self._press_ev:
+                self._press_ev.cancel()
+            if not self._long_fired and self._on_tap:
+                self._on_tap()
+            return True
         return super().on_touch_up(touch)
 
 
